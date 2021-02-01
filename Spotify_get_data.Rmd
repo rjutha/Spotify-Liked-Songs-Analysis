@@ -201,7 +201,7 @@ track_info %>% select(-track.album.artists, -track.artists) %>%
 
 ```{r}
 write_rds(track_info, 'liked_songs_clean.rds')
-write_rds(top_artists, 'liked_songs_artists_clean.csv')
-write_csv(track_info, 'liked_songs_clean.rds')
+write_rds(top_artists, 'liked_songs_artists_clean.rds')
+write_csv(track_info, 'liked_songs_clean.csv')
 write_csv(top_artists, 'liked_songs_artists_clean.csv')
 ```
