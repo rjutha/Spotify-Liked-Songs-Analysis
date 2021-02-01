@@ -1,0 +1,38 @@
+---
+title: "Spotify_Data_Exploration"
+author: "Rahim Jutha"
+date: "31/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+x = read_rds('liked_songs_artists_clean.rds')
+y = read_rds('liked_songs_clean.rds')
+```
+
+
+WordCloud2
+===
+```{r}
+library(wordcloud2)
+genres = c(x$G1,x$G2,x$G3,x$G4,x$G5,x$G6,x$G7,x$G8,x$G9,x$G10)
+genres = genres[!is.na(genres)]
+genres_count = table(genres)
+
+freqtable = plyr::count(genres)
+freqtable %>% arrange(desc(freq))
+
+
+wordcloud2(freqtable)
+x %>% select(Artist, num_songs) -> artfreq
+
+wordcloud2(artfreq)
+```
