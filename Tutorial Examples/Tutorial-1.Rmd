@@ -1,0 +1,102 @@
+---
+title: "Tutorial 1"
+author: "Rahim Jutha"
+date: "01/11/2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Authentification
+===
+```{r}
+Sys.setenv(SPOTIFY_CLIENT_ID = '6d7f3e6171c149a6b365504f76e3755c')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = 'c653ee4f4dc647668c44d5e8d4671091')
+
+library(spotifyr)
+
+access_token <- get_spotify_access_token()
+```
+
+
+What was the Beatles Favourite Key
+===
+```{r}
+library(spotifyr)
+beatles <- get_artist_audio_features('the beatles')
+
+library(tidyverse)
+library(knitr)
+
+beatles %>% 
+  count(key_mode, sort = TRUE) %>% 
+  head(5) %>% 
+  kable()
+```
+
+Get your most recently played tracks
+===
+```{r}
+library(lubridate)
+
+get_my_recently_played(limit = 5) %>% 
+    mutate(artist.name = map_chr(track.artists, function(x) x$name[1]),
+           played_at = as_datetime(played_at)) %>% 
+    select(track.name, artist.name, track.album.name, played_at) %>% 
+    kable()
+```
+
+Find your all time favourite artists
+===
+```{r}
+get_my_top_artists_or_tracks(type = 'artists', time_range = 'long_term', limit = 5) %>% 
+    select(name, genres) %>% 
+    rowwise %>% 
+    mutate(genres = paste(genres, collapse = ', ')) %>% 
+    ungroup %>% 
+    kable()
+```
+
+Find your favourite tracks at the moment
+===
+```{r}
+get_my_top_artists_or_tracks(type = 'tracks', time_range = 'short_term', limit = 5) %>% 
+    mutate(artist.name = map_chr(artists, function(x) x$name[1])) %>% 
+    select(name, artist.name, album.name) %>% 
+    kable()
+```
+
+What's the most joyful Joy Division song?
+===
+My favorite audio feature has to be “valence,” a measure of musical positivity.
+---
+```{r}
+joy <- get_artist_audio_features('joy division')
+joy %>% 
+    arrange(-valence) %>% 
+    select(track_name, valence) %>% 
+    head(5) %>% 
+    kable()
+```
+
+Now if only there was some way to plot joy…
+---
+```{r}
+library(ggjoy)
+
+ggplot(joy, aes(x = valence, y = album_name)) + 
+    geom_joy() + 
+    theme_joy() +
+    ggtitle("Joyplot of Joy Division's joy distributions", subtitle = "Based on valence pulled from Spotify's Web API with spotifyr")
+```
+
+
+
+
+
+

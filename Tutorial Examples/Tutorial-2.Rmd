@@ -1,0 +1,188 @@
+---
+title: "Tutorial 2"
+author: "Rahim Jutha"
+date: "01/11/2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Libraries
+===
+```{r}
+library(dplyr)
+library(spotifyr)
+library(plotly)
+library(ggplot2)
+```
+
+Authentification
+===
+```{r}
+id <- '6d7f3e6171c149a6b365504f76e3755c'
+secret <- 'c653ee4f4dc647668c44d5e8d4671091'
+Sys.setenv(SPOTIFY_CLIENT_ID = id)
+Sys.setenv(SPOTIFY_CLIENT_SECRET = secret)
+
+library(spotifyr)
+access_token <- get_spotify_access_token()
+```
+Your Spotify’s Playlists
+===
+
+Use the get_user_playlists, get_playlist_tracks, and get_track_audio_features functions and your own Spotify id to retrieve data about all the songs on the playlists.
+---
+```{r}
+my_id <- 'ramsta09'
+my_plists <- get_user_playlists(my_id)
+
+my_plists2 <- my_plists %>%
+  filter(name %in% c('Stinku')) %>%
+  select(id)
+
+tracks <- get_playlist_tracks(my_plists2, authorization = access_token)
+features <- get_track_audio_features(tracks$track.id)
+```
+
+Do a left_join to join the two tables (playlist tracks and track features) by the “track_uri” column.
+---
+```{r}
+tracks2 <- tracks %>%
+  left_join(features, by= c("track.id" = "id"))
+```
+
+
+```{r}
+##########################################################
+# Stopped Here Because I needed to change the code significantly
+```
+Use mutate to create a new column that calculates a speechiness difference score by subracting 0.33 from the speechiness.
+---
+```{r}
+tracks2 <- tracks2%>%
+  mutate(difference=speechiness-0.33)
+```
+
+For the sake of ease and aesthetics, I specified my colors. This step is optional, but it happens to be my favorite part of making visualizations.
+---
+
+```{r}
+green <- "#1ed760"
+yellow <- "#e7e247"
+pink <- "#ff6f59"
+blue <- "#17bebb"
+```
+Analysis of Variables
+===
+
+I used ggplot2 to make a geom_col of the speechiness difference scores and faceted them by country to make it easier to compare the four. Since the main point of the graph is not necessarily to show the numerical speechiness difference score, but rather how far each bar goes above or below zero, I took out the grid lines. I think this also makes it look more sleek. I used ggplotly to make the graph interactive so users can zoom in and see the track, artist, and speechiness each bar represents.
+---
+
+```{r}
+viz1 <- ggplot(tracks2, aes(x=reorder(track_name, -difference), y=difference, fill=playlist_name, text=(paste("Track:", track_name, "<br>",
+                                      "Artist:", artist_name, "<br>",
+                                      "Speechiness:", speechiness))))+
+  geom_col()+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  theme_minimal()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position="none")+
+  ylab("Speechiness Difference")+
+  facet_wrap(~ playlist_name)+
+  ggtitle("Speechiness Difference")
+
+ggplotly(viz1, tooltip=c("text"))
+```
+
+
+In order to represent key graphically, I first wanted to create a data table that shows:
+---
+* how many songs from each playlist are in certain keys
+* the total number of songs in each key
+* the percentage of songs in each key that come from each playlist.
+
+```{r}
+key_country <- tracks2%>%
+  select(playlist_name, key)%>%
+  group_by(playlist_name, key)%>%
+  mutate(n=n())%>%
+  unique()%>%
+  group_by(key)%>%
+  mutate(total=sum(n))%>%
+  mutate(percent=round((n/total)*100))
+
+head(key_country, 10)
+```
+
+Using ggplot2 and plotly, I represented key as a geom_bar in two different graphs. In the first, I used position="fill" to show the percentage of songs in each key that come from each country. My second graph is almost exactly the same but does not use position="fill".
+---
+
+```{r}
+viz2 <- ggplot(key_country, aes(x=key, fill=playlist_name, y = n, 
+                                text = paste("Number of Songs: ", n, "<br>",
+                                            "Percent Songs in Key: ", percent, "%")))+
+  geom_bar(position="fill", width=0.5, stat = "identity")+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  labs(x="Key", y="Percent of Songs")+
+  guides(fill=guide_legend(title="Playlist"))+
+  theme_minimal()+
+  ggtitle("Musical Key Percentage by Playlist")
+
+ggplotly(viz2, tooltip=c("text"))
+```
+
+```{r}
+viz3 <- ggplot(key_country, aes(x=key, fill=playlist_name, y = n, 
+                                text = paste("Number of Songs: ", n, "<br>",
+                                            "Percent Songs in Key: ", percent, "%")))+
+  geom_bar(width=0.5, stat = "identity")+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  labs(x="Key", y="Number of Songs") +
+  guides(fill=guide_legend(title="Playlist"))+
+  theme_minimal()+
+  ggtitle("Musical Key Makeup by Playlist")
+
+ggplotly(viz3, tooltip=c("text"))
+```
+
+I used ggplot2 to make a geom_density of the danceability data for the four playlists. I changed the alpha to 0.7 so all four density plots would be visible.
+---
+
+```{r}
+viz4 <- ggplot(tracks2, aes(x=danceability, fill=playlist_name,
+                    text = paste(playlist_name)))+
+  geom_density(alpha=0.7, color=NA)+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  labs(x="Danceability", y="Density") +
+  guides(fill=guide_legend(title="Playlist"))+
+  theme_minimal()+
+  ggtitle("Distribution of Danceability Data")
+
+ggplotly(viz4, tooltip=c("text"))
+```
+
+I used plotly to make a dumbbell plot showing the range in danceability values for each playlist. This was my first time using plotly to make graphs – I think it turned out pretty well!
+---
+
+```{r}
+viz5 <- plot_ly(tracks3, color = I("gray80"),  
+              hoverinfo = 'text') %>%
+  add_segments(x = ~max, xend = ~min, y = ~playlist_name, yend = ~playlist_name, showlegend = FALSE) %>%
+  add_markers(x = ~max, y = ~playlist_name, name = "Maximum Danceability Value", color = I(pink), text=~paste('Max Danceability: ', max)) %>%
+  add_markers(x = ~min, y = ~playlist_name, name = "Minimum Danceability Value", color = I(blue), text=~paste('Min Danceability: ', min))%>%
+  layout(
+    title = "Playlist Danceability Range",
+    xaxis = list(title = "Danceability"),
+    yaxis= list(title=""))
+
+ggplotly(viz5)
+```
+

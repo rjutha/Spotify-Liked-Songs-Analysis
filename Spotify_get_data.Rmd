@@ -1,0 +1,205 @@
+---
+title: "Explore my music Tastes"
+author: "Rahim Jutha"
+date: "23/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading Libraries and Spotify Authentification
+```{r, warning=FALSE}
+library(spotifyr)
+library(tidyverse)
+library(knitr)
+library(stringr)
+
+Sys.setenv(SPOTIFY_CLIENT_ID = '6d7f3e6171c149a6b365504f76e3755c')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = 'c653ee4f4dc647668c44d5e8d4671091')
+
+access_token <- get_spotify_access_token()
+```
+
+
+```{r}
+if(!file.exists('liked_songs_playlist_raw.rds')){
+liked_songs <-
+  ceiling(get_my_saved_tracks(include_meta_info = TRUE)[['total']] / 50) %>%
+  seq() %>%
+  map(function(x) {
+    get_my_saved_tracks(limit = 50, offset = (x - 1) * 50)
+  })  %>%
+  reduce(rbind) %>%
+  write_rds('liked_songs_playlist_raw.rds')
+}else{
+  liked_songs = read_rds('liked_songs_playlist_raw.rds')
+}
+``` 
+
+```{r}
+top_artists <-
+  liked_songs %>%
+  select(track.artists) %>%
+  reduce(rbind) %>%
+  reduce(rbind) %>%
+  select(id, name) %>%
+  group_by(name) %>%
+  count(id, sort = TRUE) %>%
+  arrange(desc(n))
+
+if(!file.exists('artist_info_raw.rds')){
+artist_info <-
+  top_artists$id %>%
+  map(function(x)
+  {
+    get_artist(x)
+  }) %>%
+  write_rds('artist_info_raw.rds')
+}else{
+  artist_info = read_rds('artist_info_raw.rds')
+}
+
+if(!file.exists('artist_genres_raw.rds')){
+artist_genres <-
+  top_artists$id %>%
+  map(function(x)
+  {
+    get_artist(x)$genres
+  }) %>% write_rds('artist_genres_raw.rds')
+}else{
+  artist_genres = read_rds('artist_genres_raw.rds')
+}
+
+# Code returns the max number of genres a artist has
+artist_genres %>%
+  lapply(unlist) %>%
+  str_c() %>%
+  str_replace('c\\(\\"', '') %>%
+  str_replace_all('\", \"', '\\\\') %>%
+  str_replace('\"\\)', '') %>%
+  str_split('\\\\') %>%
+  lapply(length) %>%
+  unlist %>%
+  max() -> max_genres
+
+artist_genres %>%
+  lapply(unlist) %>%
+  str_c() %>%
+  str_replace('c\\(\\"', '') %>%
+  str_replace_all('\", \"', '\\\\') %>%
+  str_replace('\"\\)', '') %>%
+  tibble() %>%
+  separate(sep = '\\\\', col = c('.'), into = str_c('G',as.character(1:max_genres))) %>%
+  bind_cols(top_artists, .) -> top_artists
+
+extract_followers_from_artist_info <- function(artist_info)
+{
+  x = c()
+  for (i in 1:length(artist_info))
+  {
+    x = c(x,artist_info[[i]]$followers$total)
+  }
+  return(x)
+}
+
+extract_popularity_from_artist_info <- function(artist_info)
+{
+  x = c()
+  for (i in 1:length(artist_info))
+  {
+    x = c(x,artist_info[[i]]$popularity)
+  }
+  return(x)
+}
+
+top_artists %>%
+  ungroup() %>%
+  mutate(G1 = na_if(G1, 'NULL'),
+         Followers = extract_followers_from_artist_info(artist_info),
+         Popularity = extract_popularity_from_artist_info(artist_info)) %>%
+  rename(Artist = name, num_songs = n) %>%
+  select(Artist, Followers, Popularity, num_songs, G1:G10, id) -> top_artists
+```
+
+```{r}
+if(!file.exists('track_info_raw.rds')){
+  track_info <-
+  liked_songs$track.id %>%
+  map(function(x)
+  {
+    get_track_audio_features(x)
+  }) %>%
+  reduce(rbind) %>%
+  write_rds('track_info_raw.rds')
+}else{
+  track_info = read_rds('track_info_raw.rds')
+}
+
+track_info %>% select(-type, -uri, -track_href, -analysis_url, -duration_ms) -> track_info 
+
+liked_songs %>%
+  select(track.artists, track.duration_ms, track.explicit, track.id, track.name, track.popularity, track.album.artists, track.album.id, track.album.name, track.album.release_date, track.album.release_date_precision) %>%
+  inner_join(track_info, by=c('track.id' = 'id')) -> track_info
+
+extract_track_artist <- function(track_info)
+{
+  x = c()
+  for (i in 1:length(track_info$track.artists)) 
+  {
+    y <- track_info$track.artists[[i]]$name %>%
+    str_c(collapse = "\\")  
+    x = c(x,y)
+  }
+  return(x)
+}
+extract_max_track_artist <- function(track_info){
+  x = c()
+  for (i in 1:length(track_info$track.artists)){
+    x = c(x,length(track_info$track.artists[[i]]$name))
+  }
+  return(max(x))
+}
+max_track_artist = extract_max_track_artist(track_info)
+
+extract_track_artist(track_info) %>%
+  tibble() %>%
+  separate(sep = '\\\\', col = c('.'), into = str_c('Track_Artist',as.character(1:max_track_artist))) %>%
+  bind_cols(track_info) -> track_info
+
+extract_album_artist <- function(track_info)
+{
+  x = c()
+  for (i in 1:length(track_info$track.album.artists)) 
+  {
+    y <- track_info$track.album.artists[[i]]$name %>%
+    str_c(collapse = "\\")  
+    x = c(x,y)
+  }
+  return(x)
+}
+
+extract_max_album_artist <- function(track_info){
+  x = c()
+  for (i in 1:length(track_info$track.album.artists)){
+    x = c(x,length(track_info$track.album.artists[[i]]$name))
+  }
+  return(max(x))
+}
+
+max_album_artist = extract_max_album_artist(track_info)
+
+extract_album_artist(track_info) %>%
+  tibble() %>%
+  separate(sep = '\\\\', col = c('.'), into = str_c('Album_Artist',as.character(1:max_album_artist))) %>%
+  bind_cols(track_info) -> track_info
+
+track_info %>% select(-track.album.artists, -track.artists) %>%
+  select(track.name,Album_Artist1:Album_Artist3, !Track_Artist1:Track_Artist8 ,everything()) -> track_info
+```
+
+```{r}
+write_rds(track_info, 'liked_songs_clean.rds')
+write_rds(top_artists, 'liked_songs_artists_clean.rds')
+```
